@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>ChronoChess Command Center</title>
+    
+    <!-- PWA MANIFEST LINK (Kept for PWA styling, but registration logic removed) -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Theme color for mobile browser tab -->
+    <meta name="theme-color" content="#0a0a0a"/>
+    
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#00ff00",
+                        "brutal-dark-bg": "#0a0a0a",
+                        "brutal-light-text": "#f0f0f0",
+                        "brutal-dark-text": "#0a0a0a",
+                        "brutal-border": "#444444",
+                        "brutal-active": "#00ff00",
+                        "brutal-inactive": "#777777",
+                    },
+                    fontFamily: {
+                        "display": ["IBM Plex Mono", "monospace"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0", "lg": "0", "xl": "0", "full": "0"
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        body {
+            min-height: 100dvh;
+            background-color: var(--tw-colors-brutal-dark-bg);
+            color: var(--tw-colors-brutal-light-text);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 700;
+        }
+        /* Custom styles for the dynamic buttons */
+        .config-button {
+            transition: all 0.1s;
+        }
+        .config-button.active {
+            background-color: var(--tw-colors-primary);
+            color: var(--tw-colors-brutal-dark-text);
+            border-color: var(--tw-colors-primary);
+        }
+        .config-button:not(.active) {
+            background-color: var(--tw-colors-brutal-dark-bg);
+            color: var(--tw-colors-brutal-inactive);
+            border-color: var(--tw-colors-brutal-border);
+        }
+        .config-button:not(.active):hover {
+            color: var(--tw-colors-primary);
+            border-color: var(--tw-colors-primary);
+        }
+        .timer-display {
+            font-size: clamp(3rem, 10vw, 6rem); /* Responsive font size for timers */
+            line-height: 1;
+        }
+        .timer-container.active {
+            box-shadow: 0 0 1rem var(--tw-colors-primary);
+            border-color: var(--tw-colors-primary);
+        }
+        .timer-container.inactive {
+            filter: grayscale(100%);
+            opacity: 0.5;
+        }
+        
+        /* Chessboard Styling (Simple 8x8 Grid) */
+        .chessboard {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            aspect-ratio: 1 / 1;
+            max-width: 100%;
+            margin: 0 auto;
+        }
+        .square {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(1rem, 4vw, 2.5rem);
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .square:nth-child(even) { background-color: #333; }
+        .square:nth-child(odd) { background-color: #111; }
+        .square:nth-child(8n+1):nth-child(odd),
+        .square:nth-child(8n+2):nth-child(even),
+        .square:nth-child(8n+3):nth-child(odd),
+        .square:nth-child(8n+4):nth-child(even),
+        .square:nth-child(8n+5):nth-child(odd),
+        .square:nth-child(8n+6):nth-child(even),
+        .square:nth-child(8n+7):nth-child(odd),
+        .square:nth-child(8n+8):nth-child(even) {
+            background-color: #333;
+        }
+        .square:nth-child(8n+1):nth-child(even),
+        .square:nth-child(8n+2):nth-child(odd),
+        .square:nth-child(8n+3):nth-child(even),
+        .square:nth-child(8n+4):nth-child(odd),
+        .square:nth-child(8n+5):nth-child(even),
+        .square:nth-child(8n+6):nth-child(odd),
+        .square:nth-child(8n+7):nth-child(even),
+        .square:nth-child(8n+8):nth-child(odd) {
+            background-color: #111;
+        }
+    </style>
+</head>
+<body class="bg-brutal-dark-bg text-brutal-light-text font-display">
+
+<div class="relative flex h-full min-h-screen w-full flex-col overflow-x-hidden">
+    <!-- Header -->
+    <div class="flex items-center justify-between p-4 border-b border-brutal-border bg-brutal-dark-bg z-10">
+        <div class="flex items-center gap-2">
+            <div class="text-primary flex size-8 items-center justify-center bg-brutal-dark-text border border-primary">
+                <span class="material-symbols-outlined text-xl">terminal</span>
+            </div>
+            <h2 class="text-brutal-light-text text-xl font-bold uppercase tracking-widest">CHRONOCHESS_OS</h2>
+        </div>
+        <button id="settings-btn" class="size-8 flex items-center justify-center border border-brutal-border text-brutal-inactive hover:text-brutal-active hover:border-brutal-active transition-colors">
+            <span class="material-symbols-outlined text-xl">settings</span>
+        </button>
+    </div>
+
+    <!-- Main Content Container -->
+    <div class="flex flex-col flex-1 p-4 gap-4">
+
+        <!-- 1. CONFIGURATION SCREEN -->
+        <div id="config-screen" class="flex flex-col flex-1 gap-4">
+            <div class="py-4 text-center border border-brutal-border bg-brutal-dark-bg/50">
+                <h1 class="text-brutal-light-text tracking-wide text-[2.5rem] leading-none mb-2 font-bold uppercase">
+                    INITIATE_GAME <br/>
+                    <span class="text-primary">PROTOCOL</span>
+                </h1>
+                <p class="text-brutal-inactive text-sm leading-relaxed max-w-xs mx-auto">
+                    Configure parameters for tactical engagement.
+                </p>
+            </div>
+
+            <!-- Configuration Options -->
+            <div class="grid grid-cols-2 gap-2 flex-1 auto-rows-min">
+                <!-- TIME_CONTROL -->
+                <div class="flex flex-col border border-brutal-border p-3 gap-2 bg-brutal-dark-bg/70">
+                    <h3 class="text-brutal-light-text text-base font-bold uppercase mb-1">TIME_CONTROL</h3>
+                    <div id="time-control-buttons" class="grid grid-cols-2 gap-2 text-center text-sm font-semibold">
+                        <!-- Time values are in milliseconds -->
+                        <button class="config-button block py-2 border uppercase" data-config-type="timeControl" data-value="600000">10 MIN</button>
+                        <button class="config-button block py-2 border uppercase" data-config-type="timeControl" data-value="300000">5 MIN</button>
+                        <button class="config-button block py-2 border uppercase" data-config-type="timeControl" data-value="180000">3 MIN</button>
+                        <button class="config-button block py-2 border uppercase" data-config-type="timeControl" data-value="60000">1 MIN</button>
+                    </div>
+                    <button class="flex items-center justify-center gap-2 text-sm py-2 border border-brutal-border text-brutal-inactive hover:bg-brutal-dark-text hover:text-primary transition-colors mt-2">
+                        <span class="material-symbols-outlined text-base">edit</span>CUSTOM
+                    </button>
+                </div>
+                <!-- INCREMENTS -->
+                <div class="flex flex-col border border-brutal-border p-3 gap-2 bg-brutal-dark-bg/70">
+                    <h3 class="text-brutal-light-text text-base font-bold uppercase mb-1">INCREMENTS</h3>
+                    <div id="increment-buttons" class="grid grid-cols-2 gap-2 text-center text-sm font-semibold">
+                        <!-- Increment values are in milliseconds -->
+                        <button class="config-button block py-2 border uppercase" data-config-type="increment" data-value="0">NONE</button>
+                        <button class="config-button block py-2 border uppercase" data-config-type="increment" data-value="5000">+5 SEC</button>
+                        <button class="config-button block py-2 border uppercase" data-config-type="increment" data-value="10000">+10 SEC</button>
+                        <button class="config-button block py-2 border uppercase" data-config-type="increment" data-value="30000">+30 SEC</button>
+                    </div>
+                    <button class="flex items-center justify-center gap-2 text-sm py-2 border border-brutal-border text-brutal-inactive hover:bg-brutal-dark-text hover:text-primary transition-colors mt-2">
+                        <span class="material-symbols-outlined text-base">edit</span>CUSTOM
+                    </button>
+                </div>
+                <!-- PLAYER_SIDE -->
+                <div class="col-span-2 flex flex-col border border-brutal-border p-3 gap-2 bg-brutal-dark-bg/70">
+                    <h3 class="text-brutal-light-text text-base font-bold uppercase mb-1">PLAYER_SIDE</h3>
+                    <div id="side-buttons" class="grid grid-cols-3 gap-2 text-center text-sm font-semibold">
+                        <button class="config-button flex items-center justify-center gap-2 py-2 border uppercase" data-config-type="side" data-value="white">
+                            <span class="material-symbols-outlined text-base">chess_pawn</span>WHITE
+                        </button>
+                        <button class="config-button flex items-center justify-center gap-2 py-2 border uppercase" data-config-type="side" data-value="black">
+                            <span class="material-symbols-outlined text-base">chess_pawn</span>BLACK
+                        </button>
+                        <button class="config-button flex items-center justify-center gap-2 py-2 border uppercase" data-config-type="side" data-value="random">
+                            <span class="material-symbols-outlined text-base">shuffle</span>RANDOM
+                        </button>
+                    </div>
+                </div>
+                <!-- GAME_MODE (Dummy for UI continuity) -->
+                <div class="col-span-2 flex flex-col border border-brutal-border p-3 gap-2 bg-brutal-dark-bg/70">
+                    <h3 class="text-brutal-light-text text-base font-bold uppercase mb-1">GAME_MODE</h3>
+                    <div class="grid grid-cols-2 gap-2 text-center text-sm font-semibold">
+                        <button class="flex items-center justify-center gap-2 py-2 border border-primary bg-primary text-brutal-dark-text uppercase">
+                            <span class="material-symbols-outlined text-base">timer</span>STANDARD
+                        </button>
+                        <button class="flex items-center justify-center gap-2 py-2 border border-brutal-border text-brutal-inactive opacity-50 cursor-not-allowed">
+                            <span class="material-symbols-outlined text-base">trophy</span>TOURNAMENT
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Start Button -->
+            <div class="mt-auto p-0 pt-2 border-t border-brutal-border bg-brutal-dark-bg">
+                <button id="start-game-btn" class="relative flex w-full items-center justify-center h-16 bg-primary text-brutal-dark-text text-2xl font-extrabold leading-normal tracking-wider uppercase border-t border-primary shadow-lg shadow-primary/30">
+                    <span class="material-symbols-outlined text-3xl mr-3">play_arrow</span>
+                    <span class="relative z-10">START_GAME</span>
+                </button>
+                <button class="flex w-full cursor-pointer items-center justify-center h-12 bg-transparent border-t border-brutal-border text-brutal-inactive text-sm font-semibold leading-normal uppercase hover:bg-brutal-dark-text hover:text-primary transition-colors">
+                    <span class="truncate">VIEW_PRESETS_CONSOLE</span>
+                </button>
+            </div>
+        </div>
+        
+        <!-- 2. GAME SCREEN (Initially hidden) -->
+        <div id="game-screen" class="hidden flex-col flex-1 gap-4">
+            
+            <!-- Black Player Timer (Top) -->
+            <div id="black-timer-container" class="timer-container flex flex-col items-center justify-center p-4 border border-brutal-border bg-brutal-dark-bg/50 transition-all duration-300">
+                <p class="text-sm uppercase text-brutal-inactive mb-1">BLACK_CLOCK</p>
+                <h2 id="black-timer" class="timer-display text-brutal-light-text font-bold">10:00</h2>
+            </div>
+            
+            <!-- Chessboard Placeholder -->
+            <div class="flex-1 w-full max-w-lg mx-auto flex items-center justify-center">
+                <div id="chessboard" class="chessboard border-4 border-brutal-border shadow-2xl shadow-primary/20">
+                    <!-- Squares generated by JS -->
+                </div>
+            </div>
+
+            <!-- White Player Timer (Bottom) -->
+            <div id="white-timer-container" class="timer-container flex flex-col items-center justify-center p-4 border border-brutal-border bg-brutal-dark-bg/50 transition-all duration-300">
+                <h2 id="white-timer" class="timer-display text-brutal-light-text font-bold">10:00</h2>
+                <p class="text-sm uppercase text-brutal-inactive mt-1">WHITE_CLOCK</p>
+            </div>
+            
+            <!-- Game Controls -->
+            <div class="mt-2 p-0 border-t border-brutal-border bg-brutal-dark-bg">
+                <button id="simulate-move-btn" class="relative flex w-full items-center justify-center h-16 bg-primary text-brutal-dark-text text-2xl font-extrabold leading-normal tracking-wider uppercase border-t border-primary shadow-lg shadow-primary/30">
+                    <span class="material-symbols-outlined text-3xl mr-3">arrow_forward</span>
+                    <span class="relative z-10">SIMULATE_MOVE</span>
+                </button>
+            </div>
+            <p id="game-status" class="text-center text-sm text-primary tracking-wider uppercase">AWAITING_INPUT</p>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    // --- CORE GAME STATE & CONFIGURATION ---
+
+    const DEFAULT_TIME_MS = 600000; // 10 minutes
+    const DEFAULT_INCREMENT_MS = 5000; // 5 seconds
+    const DEFAULT_SIDE = 'black';
+
+    let gameState = {
+        timeControl: DEFAULT_TIME_MS, // Configured time in milliseconds
+        increment: DEFAULT_INCREMENT_MS, // Configured increment in milliseconds
+        side: DEFAULT_SIDE, // 'white', 'black', or 'random'
+        
+        // Live Game State
+        whiteTime: DEFAULT_TIME_MS,
+        blackTime: DEFAULT_TIME_MS,
+        currentPlayer: 'white', // 'white' or 'black'
+        isGameActive: false,
+        timerInterval: null,
+        gameStatus: 'READY'
+    };
+
+    // Variables for drift correction
+    let timerStartTime = 0;
+    let initialRemainingTime = 0;
+
+    const elements = {
+        configScreen: document.getElementById('config-screen'),
+        gameScreen: document.getElementById('game-screen'),
+        startGameBtn: document.getElementById('start-game-btn'),
+        simulateMoveBtn: document.getElementById('simulate-move-btn'),
+        gameStatusDisplay: document.getElementById('game-status'),
+        settingsBtn: document.getElementById('settings-btn'), 
+        
+        whiteTimerDisplay: document.getElementById('white-timer'),
+        blackTimerDisplay: document.getElementById('black-timer'),
+        whiteTimerContainer: document.getElementById('white-timer-container'),
+        blackTimerContainer: document.getElementById('black-timer-container'),
+
+        timeButtons: document.querySelectorAll('[data-config-type="timeControl"]'),
+        incrementButtons: document.querySelectorAll('[data-config-type="increment"]'),
+        sideButtons: document.querySelectorAll('[data-config-type="side"]'),
+        chessboard: document.getElementById('chessboard')
+    };
+
+    // --- UTILITIES ---
+
+    /**
+     * Converts milliseconds to MM:SS format (rounded up for display).
+     * @param {number} ms Time in milliseconds.
+     * @returns {string} Formatted time string (MM:SS).
+     */
+    function formatTime(ms) {
+        if (ms <= 0) return "00:00";
+        
+        // Use Math.ceil to display seconds visually until the very last moment
+        const totalSeconds = Math.ceil(ms / 1000); 
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        const formattedMinutes = String(minutes).padStart(2, '0');
+        const formattedSeconds = String(seconds).padStart(2, '0');
+
+        return `${formattedMinutes}:${formattedSeconds}`;
+    }
+
+    /**
+     * Renders the 8x8 chessboard visually (no piece logic).
+     */
+    function renderChessboard() {
+        if (!elements.chessboard) return;
+        elements.chessboard.innerHTML = ''; // Clear existing
+        for (let i = 0; i < 64; i++) {
+            const square = document.createElement('div');
+            square.classList.add('square');
+            // Adding dummy coordinate labels for aesthetic
+            if (i % 8 === 0) square.textContent = String.fromCharCode(72 - (i / 8)); // H, G, F...
+            if (i >= 56) square.textContent = String.fromCharCode(65 + (i % 8)); // A, B, C...
+            elements.chessboard.appendChild(square);
+        }
+    }
+
+
+    /**
+     * Updates the visual state of configuration buttons and start button text.
+     */
+    function updateConfigUI() {
+        const activeTimeValue = String(gameState.timeControl);
+        const activeIncrementValue = String(gameState.increment);
+        const activeSideValue = gameState.side;
+
+        // Update Time Buttons
+        elements.timeButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.value === activeTimeValue);
+        });
+
+        // Update Increment Buttons
+        elements.incrementButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.value === activeIncrementValue);
+        });
+
+        // Update Side Buttons
+        elements.sideButtons.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.value === activeSideValue);
+        });
+
+        // Update Start Button Text with Config Summary
+        const minutes = gameState.timeControl / 60000;
+        const incSeconds = gameState.increment / 1000;
+        const configText = `${minutes}M+${incSeconds}S | ${activeSideValue.toUpperCase()}`;
+        elements.startGameBtn.querySelector('span:nth-child(2)').textContent = `START_GAME (${configText})`;
+    }
+
+    /**
+     * Handles clicks on configuration buttons.
+     * @param {Event} event 
+     */
+    function handleConfigClick(event) {
+        const button = event.target.closest('.config-button');
+        if (!button) return;
+
+        const type = button.dataset.configType;
+        let value = button.dataset.value;
+
+        // Parse numerical values
+        if (type === 'timeControl' || type === 'increment') {
+            value = parseInt(value);
+        }
+
+        // Update state
+        gameState[type] = value;
+        updateConfigUI();
+    }
+
+    // --- GAME CONTROL ---
+
+    /**
+     * Toggles between the configuration and game screens.
+     * @param {string} screenId 'config-screen' or 'game-screen'
+     */
+    function toggleScreen(screenId) {
+        if (screenId === 'game-screen') {
+            elements.configScreen.classList.add('hidden');
+            elements.gameScreen.classList.remove('hidden');
+            elements.gameScreen.classList.add('flex');
+        } else {
+            // Stop game and reset state when going back to config
+            stopTimer();
+            gameState.isGameActive = false;
+            gameState.gameStatus = 'READY';
+            elements.gameStatusDisplay.textContent = 'READY';
+            
+            elements.gameScreen.classList.add('hidden');
+            elements.gameScreen.classList.remove('flex');
+            elements.configScreen.classList.remove('hidden');
+        }
+    }
+
+    /**
+     * Starts the chess game.
+     */
+    function startGame() {
+        // Reset and apply configuration
+        gameState.whiteTime = gameState.timeControl;
+        gameState.blackTime = gameState.timeControl;
+        gameState.isGameActive = true;
+        gameState.gameStatus = 'IN_PROGRESS';
+        
+        // Determine starting player
+        let startingPlayer = gameState.side;
+        if (startingPlayer === 'random') {
+            startingPlayer = Math.random() < 0.5 ? 'white' : 'black';
+        }
+        gameState.currentPlayer = startingPlayer;
+
+        // Update UI and start the timer
+        updateTimerDisplay();
+        toggleScreen('game-screen');
+        startTimer();
+    }
+    
+    /**
+     * Switches the turn after a simulated move.
+     */
+    function switchTurn() {
+        if (!gameState.isGameActive) return;
+        
+        // Stop the current player's clock
+        stopTimer();
+
+        // 1. Apply increment to the player who just moved
+        const movedPlayer = gameState.currentPlayer;
+        const timeKey = `${movedPlayer}Time`;
+        gameState[timeKey] += gameState.increment;
+
+        // 2. Switch the current player
+        gameState.currentPlayer = movedPlayer === 'white' ? 'black' : 'white';
+
+        // 3. Start the timer for the new player
+        startTimer();
+    }
+
+    // --- TIMER LOGIC (Drift-Corrected) ---
+
+    /**
+     * Updates the timer UI and checks for timeout.
+     */
+    function updateTimerDisplay() {
+        const whiteTime = gameState.whiteTime;
+        const blackTime = gameState.blackTime;
+        const isWhiteTurn = gameState.currentPlayer === 'white';
+
+        // Update timer displays
+        elements.whiteTimerDisplay.textContent = formatTime(whiteTime);
+        elements.blackTimerDisplay.textContent = formatTime(blackTime);
+        
+        // Update container styles (active/inactive)
+        elements.whiteTimerContainer.classList.toggle('active', isWhiteTurn);
+        elements.whiteTimerContainer.classList.toggle('inactive', !isWhiteTurn);
+        elements.blackTimerContainer.classList.toggle('active', !isWhiteTurn);
+        elements.blackTimerContainer.classList.toggle('inactive', isWhiteTurn);
+        
+        elements.gameStatusDisplay.textContent = gameState.isGameActive ? 
+            `${gameState.currentPlayer.toUpperCase()}_TURN` : 
+            gameState.gameStatus;
+    }
+    
+    /**
+     * Starts the main game timer interval using a drift-corrected calculation.
+     */
+    function startTimer() {
+        if (gameState.timerInterval) clearInterval(gameState.timerInterval);
+        
+        elements.simulateMoveBtn.classList.add('animate-pulse');
+
+        const playerKey = `${gameState.currentPlayer}Time`;
+        
+        // Capture the moment the timer starts and the remaining time at that moment
+        timerStartTime = Date.now();
+        initialRemainingTime = gameState[playerKey]; 
+
+        gameState.timerInterval = setInterval(() => {
+            if (!gameState.isGameActive) {
+                stopTimer();
+                return;
+            }
+
+            // Calculate actual elapsed time since this timer started
+            const elapsed = Date.now() - timerStartTime;
+            
+            // Recalculate based on the initial remaining time and elapsed time (drift-free)
+            gameState[playerKey] = initialRemainingTime - elapsed;
+            
+            if (gameState[playerKey] <= 0) {
+                gameState[playerKey] = 0;
+                updateTimerDisplay(); // Ensure 00:00 is displayed
+                gameOver();
+                return;
+            }
+
+            updateTimerDisplay();
+
+        }, 100); // Ticks every 100ms for responsiveness (even though display is MM:SS)
+    }
+    
+    /**
+     * Stops the game timer interval and saves the current time.
+     */
+    function stopTimer() {
+        if (gameState.timerInterval) {
+            clearInterval(gameState.timerInterval);
+            gameState.timerInterval = null;
+        }
+        elements.simulateMoveBtn.classList.remove('animate-pulse');
+    }
+
+    /**
+     * Ends the game and displays the winner.
+     */
+    function gameOver() {
+        gameState.isGameActive = false;
+        stopTimer();
+        
+        // The opponent wins if the current player's time runs out
+        const winner = gameState.currentPlayer === 'white' ? 'BLACK' : 'WHITE';
+        gameState.gameStatus = `${winner}_WINS_BY_TIMEOUT`;
+        updateTimerDisplay();
+    }
+
+
+    // --- INITIALIZATION & EVENT LISTENERS ---
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // 1. Initial configuration setup
+        updateConfigUI(); 
+        
+        // 2. Render the aesthetic chessboard
+        renderChessboard();
+        
+        // 3. Add listeners to all config buttons
+        document.querySelectorAll('.config-button').forEach(button => {
+            button.addEventListener('click', handleConfigClick);
+        });
+
+        // 4. Game Control listeners
+        elements.startGameBtn.addEventListener('click', startGame);
+        elements.simulateMoveBtn.addEventListener('click', switchTurn);
+        if (elements.settingsBtn) {
+            elements.settingsBtn.addEventListener('click', () => toggleScreen('config-screen'));
+        }
+
+        // 5. Initial display
+        elements.whiteTimerDisplay.textContent = formatTime(DEFAULT_TIME_MS);
+        elements.blackTimerDisplay.textContent = formatTime(DEFAULT_TIME_MS);
+        
+        // The Service Worker registration block (point 6) has been removed to eliminate the console error.
+    });
+
+</script>
+</body>
+</html>
